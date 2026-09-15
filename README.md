@@ -6,7 +6,7 @@ EcoBin Ghana is a web-based waste management and recycling platform designed to 
 
 The platform connects customers with waste collection services, enables collectors to manage assigned pickups, supports recycling verification and reward distribution, and provides administrators with tools for managing the entire ecosystem.
 
-**Built by Kaditek Solutions**
+**Built by CaddiTech Solutions**
 
 ---
 
