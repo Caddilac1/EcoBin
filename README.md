@@ -1122,7 +1122,7 @@ The implementation should be considered complete only when the relevant workflow
 
 # Built By
 
-**Kaditek Solutions**
+**CaddiTech Solutions**
 
 EcoBin Ghana combines waste management, recycling, technology, and customer incentives into a unified digital platform designed for the Ghanaian market.
 
