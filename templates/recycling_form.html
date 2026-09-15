@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block title %}Record recycling | EcoBin Ghana{% endblock %}{% block content %}<section class="auth-panel container"><p class="eyebrow">Collection record</p><h1>Record recyclable material.</h1><form method="post">{% csrf_token %}{{ form.as_p }}<button class="button" type="submit">Submit for verification</button></form></section>{% endblock %}

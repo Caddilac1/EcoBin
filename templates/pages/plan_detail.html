@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ plan.name }} Plan | EcoBin Ghana{% endblock %}
+{% block meta_description %}Explore the EcoBin Ghana {{ plan.name }} collection plan and start the real subscription flow.{% endblock %}
+{% block content %}
+<section class="page-hero page-hero-split"><div class="container page-hero-grid"><div><p class="eyebrow">{{ plan.name }} plan</p><h1>{{ plan.description }}</h1><p class="price-large">{% if plan.price %}GHS {{ plan.price }} <small>/ month</small>{% else %}Custom pricing{% endif %}</p>{% if user.is_authenticated %}<form method="post" action="{% url 'subscribe' plan.id %}">{% csrf_token %}<button class="button" type="submit">Continue to payment</button></form>{% else %}<a class="button" href="{% url 'register' %}?next={% url 'plan-detail' plan.name|lower %}">Create an account to continue</a>{% endif %}</div><img src="{% static 'images/waste_car_with_bins.webp' %}" alt="Waste collection truck beside recycling bins"></div></section>
+<section class="section"><div class="container detail-grid"><div><p class="eyebrow">Included</p><h2>A route with a clear value exchange.</h2></div><div class="copy-stack"><p>{% if plan.name|lower == 'basic' %}Shared-route pickup twice weekly, standard separation bags and the base reward rate.{% elif plan.name|lower == 'standard' %}A dedicated pickup window, a free starter bin set and a 1.5x reward rate.{% else %}Daily pickup for restaurants and schools, compliance reporting, priority support and bulk rewards.{% endif %}</p><p>After an authenticated customer confirms this plan, EcoBin creates a pending subscription and payment record. Activation happens only after server-side payment verification.</p></div></div></section>
+{% endblock %}

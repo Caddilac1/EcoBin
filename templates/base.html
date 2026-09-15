@@ -1,0 +1,24 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}EcoBin Ghana | Reliable collection. Better recycling.{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}EcoBin Ghana connects Greater Accra households, schools, restaurants and SMEs to scheduled collection and verified recycling rewards.{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}EcoBin Ghana{% endblock %}">
+    <meta property="og:description" content="Scheduled waste collection and verified recycling rewards for Greater Accra.">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="{% static 'images/globe_with_recycle_sign.jpg' %}" type="image/jpeg">
+    <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+<body>
+<header class="site-header"><nav class="nav container" aria-label="Primary navigation">
+    <a class="brand" href="{% url 'home' %}"><span class="brand-mark">E</span><span>EcoBin <strong>Ghana</strong></span></a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu" aria-label="Open navigation"><span></span><span></span><span></span></button>
+    <div class="nav-menu" id="site-menu"><a class="{% if request.resolver_match.url_name == 'about' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'about' %}aria-current="page"{% endif %} href="{% url 'about' %}">About</a><a class="{% if request.resolver_match.url_name == 'services' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'services' %}aria-current="page"{% endif %} href="{% url 'services' %}">Services</a><a class="{% if request.resolver_match.url_name == 'pricing' or request.resolver_match.url_name == 'plan-detail' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'pricing' or request.resolver_match.url_name == 'plan-detail' %}aria-current="page"{% endif %} href="{% url 'pricing' %}">Pricing</a><a class="{% if request.resolver_match.url_name == 'how-it-works' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'how-it-works' %}aria-current="page"{% endif %} href="{% url 'how-it-works' %}">How it works</a><a class="{% if request.resolver_match.url_name == 'rewards' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'rewards' %}aria-current="page"{% endif %} href="{% url 'rewards' %}">Rewards</a><a class="{% if request.resolver_match.url_name == 'contact' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'contact' %}aria-current="page"{% endif %} href="{% url 'contact' %}">Contact</a>{% if user.is_authenticated %}<a class="button button-small {% if request.resolver_match.url_name == 'dashboard' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %} href="{% url 'dashboard' %}">Dashboard</a>{% else %}<a class="nav-login {% if request.resolver_match.url_name == 'login' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'login' %}aria-current="page"{% endif %} href="{% url 'login' %}">Log in</a><a class="button button-small {% if request.resolver_match.url_name == 'register' %}is-active{% endif %}" {% if request.resolver_match.url_name == 'register' %}aria-current="page"{% endif %} href="{% url 'register' %}">Get started</a>{% endif %}</div>
+</nav></header>
+<main>{% include 'components/messages.html' %}{% block content %}{% endblock %}</main>
+<footer class="site-footer"><div class="container footer-grid"><div><a class="brand brand-light" href="{% url 'home' %}"><span class="brand-mark">E</span><span>EcoBin <strong>Ghana</strong></span></a><p>Scheduled waste collection and verified recycling rewards for Greater Accra.</p></div><div><p class="footer-label">Explore</p><a href="{% url 'about' %}">About</a><a href="{% url 'services' %}">Services</a><a href="{% url 'faq' %}">FAQ</a><a href="{% url 'contact' %}">Contact</a></div><div><p class="footer-label">Built by</p><p>CaddiTech Solutions</p></div></div></footer>
+<script src="{% static 'js/site.js' %}"></script>
+</body></html>
