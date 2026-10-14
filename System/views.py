@@ -1,23 +1,60 @@
+import csv
+import json
 import secrets
 import uuid
 from datetime import timedelta
+from math import ceil
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Case, IntegerField, When
+from django.db.models import Case, Count, IntegerField, Q, Sum, When
+from django.db.models.functions import TruncMonth, TruncYear
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
-from .forms import ContactInquiryForm, PickupForm, RecyclingRecordForm, RegistrationForm
+from .forms import ContactInquiryForm, OTPLoginForm, PasswordLoginForm, PickupForm, RecyclingRecordForm, RegistrationForm
 from .models import ContactInquiry, Notification, OTPVerification, Payment, Pickup, RecyclingRecord, Reward, RewardWallet, Subscription, SubscriptionPlan, User
 from .payments import verify_paystack
 from .permissions import admin_required, collector_required, customer_required, is_admin
 from .rate_limits import rate_limit
 from .services import audit_event, notify, redeem_reward, reject_recycling_record, verify_recycling_record
+
+
+def _fetch_json(url):
+	request = Request(url, headers={'User-Agent': 'EcoBin Ghana pickup routing/1.0'})
+	with urlopen(request, timeout=5) as response:
+		return json.loads(response.read().decode('utf-8'))
+
+
+def _route_eta_minutes(pickup, latitude, longitude):
+	destination_latitude = pickup.location_latitude
+	destination_longitude = pickup.location_longitude
+	if destination_latitude is None or destination_longitude is None:
+		try:
+			results = _fetch_json(f'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q={quote(pickup.address)}')
+			destination = results[0] if results else None
+			if destination:
+				destination_latitude = float(destination['lat'])
+				destination_longitude = float(destination['lon'])
+				pickup.location_latitude = destination_latitude
+				pickup.location_longitude = destination_longitude
+		except (IndexError, KeyError, TypeError, ValueError, OSError):
+			return None
+	if destination_latitude is None or destination_longitude is None:
+		return None
+	try:
+		route = _fetch_json(f'https://router.project-osrm.org/route/v1/driving/{longitude},{latitude};{destination_longitude},{destination_latitude}?overview=false')
+		return max(1, ceil(float(route['routes'][0]['duration']) / 60))
+	except (IndexError, KeyError, TypeError, ValueError, OSError):
+		return None
 
 
 def home(request):
@@ -65,6 +102,13 @@ def contact(request):
 @login_required
 @customer_required
 def dashboard(request):
+	if is_admin(request.user):
+		return admin_dashboard(request)
+	if request.user.role == User.Role.COLLECTOR:
+		profile = getattr(request.user, 'collector_profile', None)
+		if not profile or not profile.is_active or not profile.is_verified:
+			return render(request, 'collector_pending.html', {'profile': profile})
+		return collector_dashboard(request)
 	pickups = Pickup.objects.all() if is_admin(request.user) else request.user.pickups.all()
 	records = RecyclingRecord.objects.all() if is_admin(request.user) else request.user.recycling_records.all()
 	subscriptions = Subscription.objects.all() if is_admin(request.user) else request.user.subscriptions.all()
@@ -84,6 +128,24 @@ def customer_pickups(request):
 
 @login_required
 @customer_required
+def pickup_tracking(request, pickup_id):
+	pickup = get_object_or_404(Pickup.objects.select_related('collector'), id=pickup_id, customer=request.user)
+	remaining = pickup.estimated_arrival_minutes
+	if pickup.status == Pickup.Status.EN_ROUTE and pickup.en_route_at and remaining is not None:
+		elapsed = int((timezone.now() - pickup.en_route_at).total_seconds() // 60)
+		remaining = max(0, remaining - elapsed)
+	return JsonResponse({
+		'status': pickup.status,
+		'status_label': pickup.get_status_display(),
+		'eta_minutes': remaining,
+		'collector_latitude': pickup.collector_latitude,
+		'collector_longitude': pickup.collector_longitude,
+		'location_updated_at': pickup.location_updated_at.isoformat() if pickup.location_updated_at else None,
+	})
+
+
+@login_required
+@customer_required
 def customer_subscription(request):
 	subscriptions = (Subscription.objects.all() if is_admin(request.user) else request.user.subscriptions.all()).select_related('customer', 'plan').order_by('-created_at')
 	return render(request, 'customer_subscription.html', {'subscriptions': subscriptions})
@@ -99,9 +161,32 @@ def customer_profile(request):
 @customer_required
 def notifications(request):
 	if request.method == 'POST':
-		request.user.notifications.filter(is_read=False).update(is_read=True, updated_at=timezone.now())
+		updated_count = request.user.notifications.filter(is_read=False).update(is_read=True, updated_at=timezone.now())
+		if updated_count:
+			audit_event(request, 'NOTIFICATIONS_MARKED_READ', description='User marked notifications as read', metadata={'count': updated_count})
 		return redirect('dashboard')
 	return render(request, 'dashboard.html', {'notifications': request.user.notifications.order_by('-created_at')[:50], 'wallet': RewardWallet.objects.get_or_create(customer=request.user)[0], 'upcoming': None, 'recycled': 0, 'subscription': None})
+
+
+@login_required
+def push_config(request):
+	return JsonResponse({'public_key': settings.VAPID_PUBLIC_KEY})
+
+
+@login_required
+def save_push_subscription(request):
+	if request.method != 'POST':
+		return JsonResponse({'error': 'POST required.'}, status=405)
+	try:
+		subscription = json.loads(request.body.decode('utf-8'))
+	except (TypeError, ValueError, UnicodeDecodeError):
+		return JsonResponse({'error': 'A valid subscription is required.'}, status=400)
+	if not isinstance(subscription, dict) or not subscription.get('endpoint'):
+		return JsonResponse({'error': 'A valid subscription is required.'}, status=400)
+	request.user.push_subscription = subscription
+	request.user.save(update_fields=['push_subscription'])
+	audit_event(request, 'PUSH_SUBSCRIPTION_UPDATED', description='User updated push notification settings')
+	return JsonResponse({'ok': True})
 
 
 @login_required
@@ -113,7 +198,10 @@ def create_pickup(request):
 		if form.is_valid():
 			pickup = form.save(commit=False)
 			pickup.customer = request.user
+			pickup.location_latitude = form.cleaned_data.get('location_lat') or None
+			pickup.location_longitude = form.cleaned_data.get('location_lng') or None
 			pickup.save()
+			notify(request.user, 'Pickup request received', f'Your pickup request for {pickup.address} has been received.', email=True, sms=True, push=True)
 			audit_event(request, 'PICKUP_CREATED', pickup, description='Customer created a pickup request')
 			return redirect('dashboard')
 	else:
@@ -244,8 +332,25 @@ def verify_recycling(request, record_id):
 @login_required
 @collector_required
 def collector_dashboard(request):
-	pickups = (Pickup.objects.all() if is_admin(request.user) else request.user.assigned_pickups.all()).select_related('customer', 'collector').exclude(status__in=[Pickup.Status.COMPLETED, Pickup.Status.CANCELLED]).order_by('pickup_date')
-	return render(request, 'collector_dashboard.html', {'pickups': pickups})
+	active_statuses = [Pickup.Status.ASSIGNED, Pickup.Status.EN_ROUTE, Pickup.Status.ARRIVED, Pickup.Status.COLLECTED, Pickup.Status.VERIFIED]
+	available_pickups = Pickup.objects.filter(collector__isnull=True, status__in=[Pickup.Status.REQUESTED, Pickup.Status.SCHEDULED]).select_related('customer').order_by('pickup_date', 'time_window')
+	assigned_pickups = (Pickup.objects.all() if is_admin(request.user) else request.user.assigned_pickups.all()).select_related('customer', 'collector').filter(status__in=active_statuses).order_by('pickup_date', 'time_window')
+	return render(request, 'collector_dashboard.html', {'available_pickups': available_pickups, 'pickups': assigned_pickups})
+
+
+@login_required
+@collector_required
+def claim_pickup(request, pickup_id):
+	if request.method != 'POST':
+		return render(request, '403.html', status=403)
+	with transaction.atomic():
+		claimed = Pickup.objects.filter(id=pickup_id, collector__isnull=True, status__in=[Pickup.Status.REQUESTED, Pickup.Status.SCHEDULED]).update(collector=request.user, status=Pickup.Status.ASSIGNED, updated_at=timezone.now())
+		if not claimed:
+			return redirect('collector-dashboard')
+		pickup = Pickup.objects.select_related('customer').get(pk=pickup_id)
+	notify(pickup.customer, 'Collector assigned', f'{request.user.get_full_name() or request.user.email} has accepted your pickup for {pickup.pickup_date}.', email=True, sms=True, push=True)
+	audit_event(request, 'PICKUP_CLAIMED', pickup, description='Collector accepted an available pickup')
+	return redirect('collector-dashboard')
 
 
 @login_required
@@ -264,15 +369,112 @@ def update_pickup_status(request, pickup_id):
 	if next_status in allowed.get(pickup.status, set()):
 		previous_status = pickup.status
 		pickup.status = next_status
-		pickup.save(update_fields=['status', 'updated_at'])
+		update_fields = ['status', 'updated_at']
+		if next_status == Pickup.Status.EN_ROUTE:
+			pickup.en_route_at = timezone.now()
+			pickup.estimated_arrival_minutes = None
+			update_fields.extend(['en_route_at', 'estimated_arrival_minutes'])
+		pickup.save(update_fields=update_fields)
+		notify(pickup.customer, 'Pickup status updated', f'Your pickup is now {pickup.get_status_display()}.', email=True, sms=True, push=True)
 		audit_event(request, 'PICKUP_STATUS_CHANGED', pickup, description=f'{previous_status} to {next_status}')
 	return redirect('collector-dashboard')
 
 
 @login_required
+@collector_required
+def update_collector_location(request, pickup_id):
+	if request.method != 'POST':
+		return JsonResponse({'error': 'POST required.'}, status=405)
+	pickup = get_object_or_404(Pickup, id=pickup_id) if is_admin(request.user) else get_object_or_404(Pickup, id=pickup_id, collector=request.user)
+	try:
+		latitude = float(request.POST.get('latitude'))
+		longitude = float(request.POST.get('longitude'))
+	except (TypeError, ValueError):
+		return JsonResponse({'error': 'Valid coordinates are required.'}, status=400)
+	if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+		return JsonResponse({'error': 'Coordinates are out of range.'}, status=400)
+	pickup.collector_latitude = latitude
+	pickup.collector_longitude = longitude
+	pickup.location_updated_at = timezone.now()
+	update_fields = ['collector_latitude', 'collector_longitude', 'location_updated_at', 'updated_at']
+	if pickup.status == Pickup.Status.EN_ROUTE:
+		pickup.estimated_arrival_minutes = _route_eta_minutes(pickup, latitude, longitude)
+		update_fields.append('estimated_arrival_minutes')
+		if pickup.location_latitude is not None and pickup.location_longitude is not None:
+			update_fields.extend(['location_latitude', 'location_longitude'])
+	pickup.save(update_fields=update_fields)
+	audit_event(request, 'COLLECTOR_LOCATION_UPDATED', pickup, description='Collector location updated')
+	return JsonResponse({'ok': True, 'eta_minutes': pickup.estimated_arrival_minutes, 'updated_at': pickup.location_updated_at.isoformat()})
+
+
+@login_required
 @admin_required
 def admin_dashboard(request):
-	return render(request, 'admin_dashboard.html', {'customers': User.objects.filter(role=User.Role.CUSTOMER).count(), 'collectors': User.objects.filter(role=User.Role.COLLECTOR, is_active=True).count(), 'pending_pickups': Pickup.objects.filter(status=Pickup.Status.REQUESTED).count(), 'completed_pickups': Pickup.objects.filter(status=Pickup.Status.COMPLETED).count(), 'recycling_kg': sum(record.weight_kg for record in RecyclingRecord.objects.filter(verification_status=RecyclingRecord.VerificationStatus.VERIFIED)), 'pending_recycling': RecyclingRecord.objects.filter(verification_status=RecyclingRecord.VerificationStatus.PENDING).select_related('customer', 'collector', 'pickup')})
+	today = timezone.localdate()
+	users = User.objects.select_related('customer_profile', 'collector_profile').order_by('-date_joined')
+	pickups = Pickup.objects.select_related('customer', 'collector').order_by('-pickup_date', '-created_at')
+	monthly_stats = list(Pickup.objects.filter(pickup_date__year__gte=today.year - 1).annotate(period=TruncMonth('pickup_date')).values('period').annotate(total=Count('id'), completed=Count('id', filter=Q(status=Pickup.Status.COMPLETED))).order_by('period'))
+	yearly_stats = list(Pickup.objects.annotate(period=TruncYear('pickup_date')).values('period').annotate(total=Count('id'), completed=Count('id', filter=Q(status=Pickup.Status.COMPLETED))).order_by('period'))
+	max_monthly_total = max((row['total'] for row in monthly_stats), default=1)
+	for row in monthly_stats:
+		row['bar_width'] = max(8, round(row['total'] * 100 / max_monthly_total))
+	return render(request, 'admin_dashboard.html', {'customers': User.objects.filter(role=User.Role.CUSTOMER).count(), 'collectors': User.objects.filter(role=User.Role.COLLECTOR, is_active=True).count(), 'total_users': User.objects.count(), 'pending_pickups': Pickup.objects.filter(status__in=[Pickup.Status.REQUESTED, Pickup.Status.SCHEDULED]).count(), 'completed_pickups': Pickup.objects.filter(status__in=[Pickup.Status.COMPLETED, Pickup.Status.VERIFIED]).count(), 'recycling_kg': RecyclingRecord.objects.filter(verification_status=RecyclingRecord.VerificationStatus.VERIFIED).aggregate(total=Sum('weight_kg'))['total'] or 0, 'pending_recycling': RecyclingRecord.objects.filter(verification_status=RecyclingRecord.VerificationStatus.PENDING).select_related('customer', 'collector', 'pickup'), 'users': users, 'pickups': pickups, 'monthly_stats': monthly_stats, 'yearly_stats': yearly_stats, 'max_monthly_total': max_monthly_total})
+
+
+@login_required
+@admin_required
+def download_pickup_report(request):
+	response = HttpResponse(content_type='text/csv')
+	response['Content-Disposition'] = 'attachment; filename="ecobin-pickup-report.csv"'
+	writer = csv.writer(response)
+	writer.writerow(['Pickup date', 'Time window', 'Customer', 'Customer type', 'Address', 'Waste type', 'Status', 'Collector', 'Created'])
+	for pickup in Pickup.objects.select_related('customer__customer_profile', 'collector').order_by('pickup_date', 'time_window'):
+		writer.writerow([pickup.pickup_date, pickup.time_window, pickup.customer.email, getattr(getattr(pickup.customer, 'customer_profile', None), 'customer_type', ''), pickup.address, pickup.get_waste_type_display(), pickup.get_status_display(), pickup.collector.email if pickup.collector else 'Unassigned', pickup.created_at])
+	return response
+
+
+def login_view(request):
+	mode = request.POST.get('mode', request.GET.get('mode', 'otp'))
+	login_email = request.POST.get('email', request.GET.get('email', ''))
+	next_url = request.POST.get('next', request.GET.get('next', ''))
+	if not url_has_allowed_host_and_scheme(next_url, {request.get_host()}, require_https=request.is_secure()):
+		next_url = ''
+	otp_form = OTPLoginForm()
+	password_form = PasswordLoginForm(request, initial={'username': login_email})
+	if request.method == 'POST':
+		if mode == 'password':
+			password_form = PasswordLoginForm(request, data=request.POST)
+			if password_form.is_valid():
+				user = password_form.get_user()
+				login(request, user)
+				audit_event(request, 'LOGIN', description='User signed in with password', metadata={'method': 'password'})
+				return redirect(next_url or 'dashboard')
+			request.audit_success = False
+			audit_event(request, 'LOGIN_FAILED', success=False, severity='WARNING', description='Password sign-in failed', metadata={'method': 'password'})
+		else:
+			otp_form = OTPLoginForm(request.POST)
+			if otp_form.is_valid():
+				user = User.objects.filter(email__iexact=otp_form.cleaned_data['email'], is_active=True, is_verified=True).first()
+				if user:
+					code = f'{secrets.randbelow(1000000):06d}'
+					OTPVerification.objects.create(user=user, code_hash=make_password(code), expires_at=timezone.now() + timedelta(minutes=10))
+					send_mail('Your EcoBin Ghana login code', f'Your EcoBin Ghana login code is {code}. It expires in 10 minutes.', None, [user.email], fail_silently=False)
+					request.session['pending_login_user'] = str(user.pk)
+					request.session['pending_login_next'] = next_url
+					return redirect('verify-otp')
+				request.audit_success = False
+				audit_event(request, 'LOGIN_OTP_REQUEST_FAILED', success=False, severity='WARNING', description='One-time-code sign-in request failed')
+				otp_form.add_error(None, 'We could not find an active verified account with that email address.')
+	return render(request, 'registration/login.html', {'form': otp_form if mode == 'otp' else password_form, 'mode': mode, 'next': next_url, 'login_email': login_email})
+
+
+@login_required
+def logout_confirm(request):
+	if request.method == 'POST':
+		audit_event(request, 'LOGOUT', description='User signed out')
+		logout(request)
+		return redirect('home')
+	return render(request, 'registration/logout_confirm.html')
 
 
 def register(request):
@@ -291,22 +493,33 @@ def register(request):
 
 
 def verify_otp(request):
-	user_id = request.session.get('pending_verification_user')
+	login_otp = 'pending_login_user' in request.session
+	user_id = request.session.get('pending_login_user' if login_otp else 'pending_verification_user')
 	if not user_id:
-		return redirect('register')
+		return redirect('login' if login_otp else 'register')
 	user = get_object_or_404(User, pk=user_id)
 	verification = user.otp_verifications.filter(used_at__isnull=True).order_by('-created_at').first()
-	if request.method == 'POST' and verification:
-		code = request.POST.get('code', '').strip()
-		verification.attempts += 1
-		if verification.attempts <= 5 and verification.expires_at > timezone.now() and check_password(code, verification.code_hash):
-			verification.used_at = timezone.now()
-			verification.save(update_fields=['attempts', 'used_at', 'updated_at'])
-			user.is_active = True
-			user.is_verified = True
-			user.save(update_fields=['is_active', 'is_verified'])
-			login(request, user)
-			request.session.pop('pending_verification_user', None)
-			return redirect('dashboard')
-		verification.save(update_fields=['attempts', 'updated_at'])
-	return render(request, 'registration/verify_otp.html', {'expired': not verification or verification.expires_at <= timezone.now()})
+	if request.method == 'POST':
+		if verification:
+			code = request.POST.get('code', '').strip()
+			verification.attempts += 1
+			if verification.attempts <= 5 and verification.expires_at > timezone.now() and check_password(code, verification.code_hash):
+				verification.used_at = timezone.now()
+				verification.save(update_fields=['attempts', 'used_at', 'updated_at'])
+				if login_otp:
+					next_url = request.session.pop('pending_login_next', '')
+					request.session.pop('pending_login_user', None)
+				else:
+					user.is_active = True
+					user.is_verified = True
+					user.save(update_fields=['is_active', 'is_verified'])
+					request.session.pop('pending_verification_user', None)
+				login(request, user)
+				if login_otp:
+					audit_event(request, 'LOGIN', description='User signed in with one-time code', metadata={'method': 'otp'})
+				return redirect(next_url if login_otp and next_url else 'dashboard')
+			verification.save(update_fields=['attempts', 'updated_at'])
+		attempts = verification.attempts if verification else 0
+		request.audit_success = False
+		audit_event(request, 'LOGIN_FAILED' if login_otp else 'ACCOUNT_VERIFICATION_FAILED', success=False, severity='WARNING', description='One-time-code verification failed', metadata={'method': 'otp', 'attempts': attempts}, actor=user)
+	return render(request, 'registration/verify_otp.html', {'expired': not verification or verification.expires_at <= timezone.now(), 'login_otp': login_otp})

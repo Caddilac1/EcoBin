@@ -1,1 +1,49 @@
-{% extends 'base.html' %}{% load static %}{% block title %}Log in | EcoBin Ghana{% endblock %}{% block content %}<section class="auth-scene auth-login"><div class="auth-visual"><img src="{% static 'images/waste_car_with_bins.webp' %}" alt="EcoBin collection vehicle beside separated bins"><div class="auth-visual-shade"></div><div class="auth-visual-copy"><span class="brand brand-light"><span class="brand-mark">E</span><span>EcoBin <strong>Ghana</strong></span></span><p>Keep the loop moving.</p><small>Collection / separation / verified rewards</small></div></div><div class="auth-form-panel"><div class="auth-form-inner"><p class="eyebrow">Welcome back</p><h1>Return to your route.</h1><p class="auth-lede">Sign in to manage pickups, subscriptions and your verified recycling wallet.</p><form method="post">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<small class="form-error">{{ error }}</small>{% endfor %}</div>{% endfor %}<button class="button" type="submit">Sign in</button></form><a class="auth-link" href="{% url 'password_reset' %}">Forgot your password?</a><p class="auth-switch">New to EcoBin? <a href="{% url 'register' %}">Create an account</a></p></div></div></section>{% endblock %}
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Log in | EcoBin Ghana{% endblock %}
+{% block content %}
+<section class="auth-scene auth-login">
+	<div class="auth-visual">
+		<img src="{% static 'images/waste_car_with_bins.webp' %}" alt="EcoBin collection vehicle beside separated bins">
+		<div class="auth-visual-shade"></div>
+		<div class="auth-visual-copy">
+			<span class="brand brand-light"><span class="brand-mark">E</span><span>EcoBin <strong>Ghana</strong></span></span>
+			<p>Keep the loop moving.</p>
+			<small>Collection / separation / verified rewards</small>
+		</div>
+	</div>
+	<div class="auth-form-panel">
+		<div class="auth-form-inner">
+			<p class="eyebrow">Welcome back</p>
+			{% if mode == 'password' %}
+				<h1>Use your password.</h1>
+				<p class="auth-lede">Sign in with your password if you cannot use a one-time code.</p>
+			{% else %}
+				<h1>Sign in with a code.</h1>
+				<p class="auth-lede">Enter your email and we will send a secure six-digit code.</p>
+			{% endif %}
+			<form method="post" data-runaway-form>
+				{% csrf_token %}
+				<input type="hidden" name="mode" value="{{ mode }}">
+				<input type="hidden" name="next" value="{{ next }}">
+				{{ form.non_field_errors }}
+				{% for field in form %}
+					<div class="field">
+						<label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span aria-hidden="true">*</span>{% endif %}</label>
+						{{ field }}
+						{% for error in field.errors %}<small class="form-error">{{ error }}</small>{% endfor %}
+					</div>
+				{% endfor %}
+				<div class="runaway-dock"><button class="button cta" type="submit" data-runaway-submit>{% if mode == 'password' %}Sign in{% else %}Send login code{% endif %}</button></div>
+			</form>
+			{% if mode == 'password' %}
+				<a class="auth-link" data-login-switch href="{% url 'login' %}?email={{ login_email|urlencode }}">Use a one-time code instead</a>
+				<a class="auth-link" href="{% url 'password_reset' %}">Forgot your password?</a>
+			{% else %}
+				<a class="auth-link" data-login-switch href="{% url 'login' %}?mode=password&amp;email={{ login_email|urlencode }}">Use your password instead</a>
+			{% endif %}
+			<p class="auth-switch">New to EcoBin? <a href="{% url 'register' %}">Create an account</a></p>
+		</div>
+	</div>
+</section>
+{% endblock %}

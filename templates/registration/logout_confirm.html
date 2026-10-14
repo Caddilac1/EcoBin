@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Log out | EcoBin Ghana{% endblock %}
+{% block content %}
+<section class="logout-page">
+    <div class="logout-panel">
+        <p class="eyebrow">Account</p>
+        <h1>Ready to log out?</h1>
+        <p>You are about to end your EcoBin Ghana session.</p>
+        <form method="post">
+            {% csrf_token %}
+            <button class="button" type="submit">Yes, log me out</button>
+            <a class="button button-outline" href="{% url 'dashboard' %}">Stay signed in</a>
+        </form>
+    </div>
+</section>
+{% endblock %}

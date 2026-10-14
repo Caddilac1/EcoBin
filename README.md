@@ -403,7 +403,11 @@ Audit records may include:
 - Status
 - Severity
 - User agent
+- Browser, operating system, and device category inferred from the user agent
+- Resolved route name and submitted field names (never submitted values)
 - Structured metadata
+
+Password-reset URL tokens are redacted. IP addresses are taken from the direct connection by default. If the app is behind a trusted reverse proxy, set `AUDIT_TRUSTED_PROXY_COUNT` to the number of trusted proxies before using forwarded client addresses; do not trust arbitrary client-supplied forwarding headers. Precise GPS or IP-derived location is not collected by audit logging.
 
 Sensitive information must **never** be written to audit logs.
 

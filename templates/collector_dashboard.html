@@ -1,1 +1,45 @@
-{% extends 'base.html' %}{% block title %}Collector dashboard | EcoBin Ghana{% endblock %}{% block content %}<section class="dashboard-placeholder container"><p class="eyebrow">Collector workspace</p><h1>Today's route.</h1><p class="lede">Move each assigned pickup through the permitted status sequence, then record recyclable material after collection.</p><div class="record-list">{% for pickup in pickups %}<article class="record-row"><div><strong>{{ pickup.pickup_date }} · {{ pickup.time_window }}</strong><span>{{ pickup.address }} · {{ pickup.customer.get_full_name|default:pickup.customer.email }} · {{ pickup.get_waste_type_display }}</span></div><div>{% if pickup.status != 'COLLECTED' and pickup.status != 'VERIFIED' %}<form method="post" action="{% url 'update-pickup-status' pickup.id %}">{% csrf_token %}<select name="status"><option value="EN_ROUTE">En route</option><option value="ARRIVED">Arrived</option><option value="COLLECTED">Collected</option><option value="FAILED">Unable to collect</option></select><button class="button button-small" type="submit">Update</button></form>{% endif %}{% if pickup.status == 'COLLECTED' %}<a class="button button-small" href="{% url 'record-recycling' pickup.id %}">Record recycling</a>{% endif %}</div></article>{% empty %}<p>No assigned pickups yet.</p>{% endfor %}</div></section>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Collector dashboard | EcoBin Ghana{% endblock %}
+{% block content %}
+<section class="dashboard-placeholder container collector-workspace">
+    <p class="eyebrow">Collector workspace</p>
+    <h1>Your route board.</h1>
+    <p class="lede">Claim an available pickup, then move it through the route sequence. Once claimed, it is locked to you so another collector cannot duplicate the visit.</p>
+    <a class="button" href="{% url 'create-pickup' %}">Schedule a pickup</a>
+    <h2>Available pickups</h2>
+    <div class="record-list">
+        {% for pickup in available_pickups %}
+        <article class="record-row collector-route-row">
+            <div><strong>{{ pickup.pickup_date }} · {{ pickup.time_window }}</strong><span>{{ pickup.address }} · {{ pickup.customer.get_full_name|default:pickup.customer.email }} · {{ pickup.get_waste_type_display }}</span></div>
+            <form method="post" action="{% url 'claim-pickup' pickup.id %}">{% csrf_token %}<button class="button button-small" type="submit">Accept pickup</button></form>
+        </article>
+        {% empty %}<p>No unassigned pickups are waiting.</p>{% endfor %}
+    </div>
+    <h2>My assigned pickups</h2>
+    <div class="record-list">
+        {% for pickup in pickups %}
+        <article class="record-row collector-route-row" data-collector-route data-pickup-id="{{ pickup.id }}">
+            <div>
+                <strong>{{ pickup.pickup_date }} · {{ pickup.time_window }}</strong>
+                <span>{{ pickup.address }} · {{ pickup.customer.get_full_name|default:pickup.customer.email }} · {{ pickup.get_waste_type_display }}</span>
+                {% if pickup.status == 'EN_ROUTE' %}<small class="live-route-status">Live location sharing is on</small>{% endif %}
+            </div>
+            <div class="collector-route-actions">
+                {% if pickup.status != 'COLLECTED' and pickup.status != 'VERIFIED' %}
+                <form method="post" action="{% url 'update-pickup-status' pickup.id %}">{% csrf_token %}
+                    <select name="status" aria-label="Update pickup status">
+                        {% if pickup.status == 'ASSIGNED' %}<option value="EN_ROUTE">On our way</option>{% endif %}
+                        {% if pickup.status == 'EN_ROUTE' %}<option value="ARRIVED">Arrived</option>{% endif %}
+                        {% if pickup.status == 'ARRIVED' %}<option value="COLLECTED">Collected</option><option value="FAILED">Unable to collect</option>{% endif %}
+                    </select>
+                    <button class="button button-small" type="submit">Update status</button>
+                </form>
+                {% endif %}
+                <a class="button button-small button-outline" href="https://www.google.com/maps/dir/?api=1&amp;destination={% if pickup.location_latitude is not None and pickup.location_longitude is not None %}{{ pickup.location_latitude }},{{ pickup.location_longitude }}{% else %}{{ pickup.address|urlencode }}{% endif %}" target="_blank" rel="noopener">Get directions</a>
+                {% if pickup.status == 'COLLECTED' %}<a class="button button-small" href="{% url 'record-recycling' pickup.id %}">Record recycling</a>{% endif %}
+            </div>
+        </article>
+        {% empty %}<p>No assigned pickups yet.</p>{% endfor %}
+    </div>
+</section>
+{% endblock %}

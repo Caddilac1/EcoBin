@@ -3,6 +3,109 @@
 {% block title %}{{ plan.name }} Plan | EcoBin Ghana{% endblock %}
 {% block meta_description %}Explore the EcoBin Ghana {{ plan.name }} collection plan and start the real subscription flow.{% endblock %}
 {% block content %}
-<section class="page-hero page-hero-split"><div class="container page-hero-grid"><div><p class="eyebrow">{{ plan.name }} plan</p><h1>{{ plan.description }}</h1><p class="price-large">{% if plan.price %}GHS {{ plan.price }} <small>/ month</small>{% else %}Custom pricing{% endif %}</p>{% if user.is_authenticated %}<form method="post" action="{% url 'subscribe' plan.id %}">{% csrf_token %}<button class="button" type="submit">Continue to payment</button></form>{% else %}<a class="button" href="{% url 'register' %}?next={% url 'plan-detail' plan.name|lower %}">Create an account to continue</a>{% endif %}</div><img src="{% static 'images/waste_car_with_bins.webp' %}" alt="Waste collection truck beside recycling bins"></div></section>
-<section class="section"><div class="container detail-grid"><div><p class="eyebrow">Included</p><h2>A route with a clear value exchange.</h2></div><div class="copy-stack"><p>{% if plan.name|lower == 'basic' %}Shared-route pickup twice weekly, standard separation bags and the base reward rate.{% elif plan.name|lower == 'standard' %}A dedicated pickup window, a free starter bin set and a 1.5x reward rate.{% else %}Daily pickup for restaurants and schools, compliance reporting, priority support and bulk rewards.{% endif %}</p><p>After an authenticated customer confirms this plan, EcoBin creates a pending subscription and payment record. Activation happens only after server-side payment verification.</p></div></div></section>
+<section class="plan-detail-hero">
+  <div class="container plan-detail-layout">
+    <div class="plan-detail-copy">
+      <p class="eyebrow">{{ plan.name }} plan</p>
+      <h1>{{ plan.description }}</h1>
+      <p class="plan-detail-lede">
+        {% if plan.name|lower == 'basic' %}
+          Ideal for households and small routines that want reliable collection without extra complexity.
+        {% elif plan.name|lower == 'standard' %}
+          Built for more active homes, growing family needs, and repeat recycling habits that deserve a steadier schedule.
+        {% else %}
+          Designed for schools, restaurants, and fast-moving operations that need consistent service and reporting.
+        {% endif %}
+      </p>
+      <div class="plan-detail-price">
+        {% if plan.price %}
+          <strong>GHS {{ plan.price }}</strong>
+          <small>/ month</small>
+        {% else %}
+          <strong>Custom pricing</strong>
+          <small>tailored for your operation</small>
+        {% endif %}
+      </div>
+      <div class="plan-detail-actions">
+        {% if user.is_authenticated %}
+          <form method="post" action="{% url 'subscribe' plan.id %}">{% csrf_token %}<button class="button" type="submit">Continue to payment</button></form>
+        {% else %}
+          <a class="button" href="{% url 'register' %}?next={% url 'plan-detail' plan.name|lower %}">Create an account to continue</a>
+        {% endif %}
+        <a class="button button-outline" href="{% url 'pricing' %}">Compare all plans</a>
+      </div>
+      <div class="plan-detail-proof">
+        <div>
+          <strong>{% if plan.name|lower == 'basic' %}2x{% elif plan.name|lower == 'standard' %}1.5x{% else %}Bulk{% endif %}</strong>
+          <small>reward value</small>
+        </div>
+        <div>
+          <strong>{% if plan.name|lower == 'business' %}Daily{% elif plan.name|lower == 'standard' %}Window{% else %}Shared{% endif %}</strong>
+          <small>pickup rhythm</small>
+        </div>
+        <div>
+          <strong>{% if plan.name|lower == 'business' %}Priority{% else %}Support{% endif %}</strong>
+          <small>service access</small>
+        </div>
+      </div>
+    </div>
+    <div class="plan-detail-visual">
+      <div class="plan-detail-media">
+        <img src="{% static 'images/waste_car_with_bins.webp' %}" alt="Waste collection truck beside recycling bins">
+        <div class="plan-detail-badge">EcoBin {{ plan.name }}</div>
+      </div>
+      <div class="plan-detail-spotlight">
+        <span>Business operations</span>
+        <strong>Daily route coverage</strong>
+        <ul>
+          <li>Priority pickup windows</li>
+          <li>Volume reporting</li>
+          <li>Dedicated coordination</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="plan-detail-features">
+  <div class="container">
+    <div class="plan-detail-header">
+      <div>
+        <p class="eyebrow">Included</p>
+        <h2>A route with a clear value exchange.</h2>
+      </div>
+      <p>
+        {% if plan.name|lower == 'basic' %}
+          Shared-route pickup twice weekly, standard separation bags and the base reward rate.
+        {% elif plan.name|lower == 'standard' %}
+          A dedicated pickup window, a free starter bin set and a 1.5x reward rate.
+        {% else %}
+          Daily pickup for restaurants and schools, compliance reporting, priority support and bulk rewards.
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="feature-grid">
+      <article class="feature-panel feature-panel-dark">
+        <span class="feature-index">01</span>
+        <h3>Service rhythm</h3>
+        <p>{% if plan.name|lower == 'business' %}Daily collection for operationally busy sites with predictable scheduling and volume planning.{% else %}A consistent, simple collection rhythm designed around the way you live or work.{% endif %}</p>
+      </article>
+      <article class="feature-panel feature-panel-light">
+        <span class="feature-index">02</span>
+        <h3>Operational support</h3>
+        <p>{% if plan.name|lower == 'business' %}Tailored coordination, reporting and priority communication for larger waste streams.{% else %}Clear collection guidance, separation support and practical updates for everyday reliability.{% endif %}</p>
+      </article>
+      <article class="feature-panel feature-panel-olive">
+        <span class="feature-index">03</span>
+        <h3>Reward impact</h3>
+        <p>{% if plan.name|lower == 'business' %}Bulk rewards, stronger incentives and a clearer return on ongoing recycling activity.{% else %}Rewards that are easy to track and meaningful enough to keep the routine going.{% endif %}</p>
+      </article>
+    </div>
+
+    <div class="plan-detail-note">
+      <p>After an authenticated customer confirms this plan, EcoBin creates a pending subscription and payment record. Activation happens only after server-side payment verification.</p>
+    </div>
+  </div>
+</section>
 {% endblock %}

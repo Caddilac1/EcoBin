@@ -26,6 +26,7 @@ class User(AbstractUser):
 	role = models.CharField(max_length=20, choices=Role.choices, default=Role.CUSTOMER)
 	phone = models.CharField(max_length=30, blank=True)
 	is_verified = models.BooleanField(default=False)
+	push_subscription = models.JSONField(default=dict, blank=True)
 	USERNAME_FIELD = 'email'
 	REQUIRED_FIELDS = ['username']
 
@@ -110,7 +111,7 @@ class Pickup(UUIDModel):
 		REQUESTED = 'REQUESTED', 'Requested'
 		SCHEDULED = 'SCHEDULED', 'Scheduled'
 		ASSIGNED = 'ASSIGNED', 'Collector assigned'
-		EN_ROUTE = 'EN_ROUTE', 'En route'
+		EN_ROUTE = 'EN_ROUTE', 'On our way'
 		ARRIVED = 'ARRIVED', 'Arrived'
 		COLLECTED = 'COLLECTED', 'Collected'
 		VERIFIED = 'VERIFIED', 'Verified'
@@ -133,6 +134,13 @@ class Pickup(UUIDModel):
 	notes = models.TextField(blank=True)
 	estimated_weight_kg = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
 	status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
+	location_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+	location_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+	collector_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+	collector_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+	estimated_arrival_minutes = models.PositiveSmallIntegerField(null=True, blank=True)
+	en_route_at = models.DateTimeField(null=True, blank=True)
+	location_updated_at = models.DateTimeField(null=True, blank=True)
 
 	class Meta:
 		ordering = ['pickup_date', 'created_at']
@@ -195,6 +203,10 @@ class AuditLog(UUIDModel):
 	action = models.CharField(max_length=80, blank=True)
 	ip_address = models.GenericIPAddressField(null=True, blank=True)
 	user_agent = models.CharField(max_length=500, blank=True)
+	browser = models.CharField(max_length=80, blank=True)
+	operating_system = models.CharField(max_length=80, blank=True)
+	device = models.CharField(max_length=40, blank=True)
+	route_name = models.CharField(max_length=200, blank=True)
 	request_method = models.CharField(max_length=10, blank=True)
 	request_path = models.CharField(max_length=500, blank=True)
 	success = models.BooleanField(default=True)
@@ -211,6 +223,8 @@ class Notification(UUIDModel):
 	message = models.TextField()
 	is_read = models.BooleanField(default=False)
 	emailed_at = models.DateTimeField(null=True, blank=True)
+	sms_sent_at = models.DateTimeField(null=True, blank=True)
+	pushed_at = models.DateTimeField(null=True, blank=True)
 
 
 class ContactInquiry(UUIDModel):

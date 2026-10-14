@@ -34,6 +34,7 @@ SECRET_KEY = env("SECRET_KEY", default="django-insecure-ecobin-development-only"
 DEBUG = env.bool('DEBUG', default=False)
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost', '127.0.0.1'])
+AUDIT_TRUSTED_PROXY_COUNT = env.int('AUDIT_TRUSTED_PROXY_COUNT', default=0)
 
 
 # Application definition
@@ -167,6 +168,13 @@ EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='EcoBin Ghana <noreply@ecobin.local>')
 PAYSTACK_SECRET_KEY = env('PAYSTACK_SECRET_KEY', default='')
 PAYSTACK_PUBLIC_KEY = env('PAYSTACK_PUBLIC_KEY', default='')
+SMS_PROVIDER = env('SMS_PROVIDER', default='')
+SMS_API_URL = env('SMS_API_URL', default='')
+SMS_API_KEY = env('SMS_API_KEY', default='')
+SMS_SENDER_ID = env('SMS_SENDER_ID', default='EcoBin')
+VAPID_PUBLIC_KEY = env('VAPID_PUBLIC_KEY', default='')
+VAPID_PRIVATE_KEY = env('VAPID_PRIVATE_KEY', default='')
+VAPID_CLAIMS_EMAIL = env('VAPID_CLAIMS_EMAIL', default='mailto:support@ecobin.local')
 RATELIMIT_LOGIN = env.int('RATELIMIT_LOGIN', default=10)
 CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'ecobin-rate-limits'}}
 

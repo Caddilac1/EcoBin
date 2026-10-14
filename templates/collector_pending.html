@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %}Collector application pending | EcoBin Ghana{% endblock %}
+{% block content %}
+<section class="dashboard-placeholder container">
+    <p class="eyebrow">Collector application</p>
+    <h1>Your account is awaiting approval.</h1>
+    {% if not profile %}
+    <p class="lede">Your account does not have a collector profile yet. Contact an administrator to have one created.</p>
+    {% elif not profile.is_verified %}
+    <p class="lede">Your email is verified, but an administrator still needs to approve your collector profile before you can accept or manage pickups.</p>
+    {% else %}
+    <p class="lede">Your collector profile is inactive. Contact an administrator to reactivate it before accepting or managing pickups.</p>
+    {% endif %}
+    <a class="button" href="{% url 'logout' %}">Log out</a>
+</section>
+{% endblock %}

@@ -1,3 +1,83 @@
 {% extends 'base.html' %}
 {% block title %}Dashboard | EcoBin Ghana{% endblock %}
-{% block content %}<section class="dashboard-placeholder container"><p class="eyebrow">Customer workspace</p><h1>Good to see you, {{ user.first_name|default:user.email }}.</h1><nav class="dashboard-nav" aria-label="Customer workspace"><a class="is-active" href="{% url 'dashboard' %}">Overview</a><a href="{% url 'customer-pickups' %}">Pickups</a><a href="{% url 'customer-subscription' %}">Subscription</a><a href="{% url 'rewards' %}">Rewards</a><a href="{% url 'customer-profile' %}">Profile</a></nav><div class="dashboard-grid"><div><span>Active subscription</span><strong>{% if subscription %}{{ subscription.plan.name }}{% else %}Not selected{% endif %}</strong></div><div><span>Next pickup</span><strong>{% if upcoming %}{{ upcoming.pickup_date }}{% else %}Nothing scheduled{% endif %}</strong></div><div><span>Recycled</span><strong>{{ recycled|floatformat:1 }} kg</strong></div><div><span>Reward points</span><strong>{{ wallet.balance }}</strong></div></div><div class="dashboard-actions"><a class="button" href="{% url 'create-pickup' %}">Schedule a pickup</a><a class="button button-outline" href="{% url 'pricing' %}">View plans</a></div><h2>Notifications</h2>{% for notification in notifications %}<p>{% if not notification.is_read %}<strong>{% endif %}{{ notification.title }}: {{ notification.message }}{% if not notification.is_read %}</strong>{% endif %}</p>{% empty %}<p>No notifications yet.</p>{% endfor %}{% if notifications %}<form method="post" action="{% url 'notifications' %}">{% csrf_token %}<button class="button button-small" type="submit">Mark all as read</button></form>{% endif %}</section>{% endblock %}
+{% block content %}
+<section class="dashboard-page">
+	<div class="container dashboard-shell">
+		<header class="dashboard-heading">
+			<div>
+				<p class="eyebrow">Customer workspace / Overview</p>
+				<h1>Good to see you, {{ user.first_name|default:user.email }}.</h1>
+				<p class="dashboard-lede">Keep your collection route moving and your recycling rewards growing.</p>
+			</div>
+			<a class="button" href="{% url 'create-pickup' %}">+ Schedule a pickup</a>
+		</header>
+
+		<nav class="dashboard-nav dashboard-nav-modern" aria-label="Customer workspace">
+			<a class="is-active" href="{% url 'dashboard' %}">Overview</a>
+			<a href="{% url 'customer-pickups' %}">Pickups</a>
+			<a href="{% url 'customer-subscription' %}">Subscription</a>
+			<a href="{% url 'rewards' %}">Rewards</a>
+			<a href="{% url 'customer-profile' %}">Profile</a>
+		</nav>
+
+		<div class="dashboard-stats">
+			<article class="dashboard-stat dashboard-stat-primary">
+				<span>Reward points</span>
+				<strong>{{ wallet.balance }}</strong>
+				<small>Available to redeem</small>
+			</article>
+			<article class="dashboard-stat">
+				<span>Recycled material</span>
+				<strong>{{ recycled|floatformat:1 }} <small>kg</small></strong>
+				<small>Verified total</small>
+			</article>
+			<article class="dashboard-stat">
+				<span>Current plan</span>
+				<strong>{% if subscription %}{{ subscription.plan.name }}{% else %}No plan{% endif %}</strong>
+				<small>{% if subscription %}Active subscription{% else %}Choose a collection plan{% endif %}</small>
+			</article>
+			<article class="dashboard-stat">
+				<span>Next pickup</span>
+				<strong>{% if upcoming %}{{ upcoming.pickup_date|date:'d M' }}{% else %}--{% endif %}</strong>
+				<small>{% if upcoming %}{{ upcoming.get_status_display }}{% else %}Nothing scheduled{% endif %}</small>
+			</article>
+		</div>
+
+		<div class="dashboard-main-grid">
+			<section class="dashboard-panel pickup-panel">
+				<div class="panel-heading">
+					<div>
+						<p class="eyebrow">Your route</p>
+						<h2>Next pickup</h2>
+					</div>
+					<a class="text-link" href="{% url 'customer-pickups' %}">View history <span>-></span></a>
+				</div>
+				{% if upcoming %}
+					<div class="pickup-card">
+						<div class="pickup-date-block"><strong>{{ upcoming.pickup_date|date:'d' }}</strong><span>{{ upcoming.pickup_date|date:'M Y' }}</span></div>
+						<div class="pickup-card-details"><span class="status-badge status-{{ upcoming.status|lower }}">{{ upcoming.get_status_display }}</span><h3>{{ upcoming.get_waste_type_display }} collection</h3><p>{{ upcoming.address }}</p><small>{{ upcoming.time_window }}</small>{% if upcoming.status == 'EN_ROUTE' %}<a class="text-link" href="{% url 'customer-pickups' %}">Track collector live <span>-></span></a>{% endif %}</div>
+						<span class="pickup-arrow">-></span>
+					</div>
+				{% else %}
+					<div class="dashboard-empty"><span class="empty-mark">+</span><div><h3>Your route is open.</h3><p>Schedule a pickup and choose a time that works for you.</p></div><a class="button button-small" href="{% url 'create-pickup' %}">Schedule now</a></div>
+				{% endif %}
+			</section>
+
+			<aside class="dashboard-side-stack">
+				<section class="dashboard-panel plan-panel">
+					<p class="eyebrow">Membership</p>
+					{% if subscription %}<h2>{{ subscription.plan.name }}</h2><p>Your collection plan is active and ready for your next route.</p><a class="text-link" href="{% url 'customer-subscription' %}">Manage plan <span>-></span></a>{% else %}<h2>Find your fit.</h2><p>Choose a plan for reliable, scheduled collection.</p><a class="text-link" href="{% url 'pricing' %}">Explore plans <span>-></span></a>{% endif %}
+				</section>
+				<section class="dashboard-panel reward-panel">
+					<div class="reward-panel-mark">E</div><p class="eyebrow">Rewards wallet</p><h2>{{ wallet.balance }} <small>pts</small></h2><p>Turn verified recycling into something useful.</p><a class="button button-small" href="{% url 'rewards' %}">Browse rewards</a>
+				</section>
+			</aside>
+		</div>
+
+		<section class="dashboard-panel notification-panel">
+			<div class="panel-heading"><div><p class="eyebrow">Stay in the loop</p><h2>Recent notifications</h2></div><div class="notification-actions"><button class="button button-small button-outline" type="button" data-enable-push>Enable browser alerts</button>{% if notifications %}<form method="post" action="{% url 'notifications' %}">{% csrf_token %}<button class="button button-small button-outline" type="submit">Mark all read</button></form>{% endif %}</div></div>
+			<div class="notification-list">{% for notification in notifications %}<article class="notification-row {% if not notification.is_read %}is-unread{% endif %}"><span class="notification-dot"></span><div><strong>{{ notification.title }}</strong><p>{{ notification.message }}</p></div><time>{{ notification.created_at|date:'d M' }}</time></article>{% empty %}<div class="dashboard-empty dashboard-empty-quiet"><h3>Nothing new here.</h3><p>We will show your collection and rewards updates in this space.</p></div>{% endfor %}</div>
+		</section>
+	</div>
+</section>
+{% endblock %}

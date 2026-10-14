@@ -1,1 +1,34 @@
-{% extends 'base.html' %}{% load static %}{% block title %}Verify your account | EcoBin Ghana{% endblock %}{% block content %}<section class="auth-scene auth-verify"><div class="verify-visual"><img src="{% static 'images/recycle-adalah-1-tablet-683x1024.webp' %}" alt="Recyclable plastic bottles prepared for collection"><div class="verify-visual-copy"><span class="eyebrow eyebrow-light">One last handoff</span><strong>Your account is almost in the loop.</strong><span>Verification protects your pickup and rewards history.</span></div></div><div class="auth-form-panel"><div class="auth-form-inner"><p class="eyebrow">Verify your account</p><h1>Enter the six-digit code.</h1><p class="auth-lede">We sent a verification code to your email. It expires after 10 minutes.</p><form method="post" class="otp-form">{% csrf_token %}<label for="code">Verification code</label><input id="code" name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus><span class="otp-hint">Six digits / one-time use</span><button class="button" type="submit">Verify account</button>{% if expired %}<p class="form-error">This code has expired. Please register again for a new code.</p>{% endif %}</form><p class="auth-switch">Need help? <a href="{% url 'contact' %}">Contact EcoBin support</a></p></div></div></section>{% endblock %}
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% if login_otp %}Confirm sign in{% else %}Verify your account{% endif %} | EcoBin Ghana{% endblock %}
+{% block content %}
+<section class="auth-scene auth-verify">
+	<div class="verify-visual">
+		<img src="{% static 'images/recycle-adalah-1-tablet-683x1024.webp' %}" alt="Recyclable plastic bottles prepared for collection">
+		<div class="verify-visual-copy">
+			<span class="eyebrow eyebrow-light">One last handoff</span>
+			<strong>{% if login_otp %}Your secure sign in is almost complete.{% else %}Your account is almost in the loop.{% endif %}</strong>
+			<span>{% if login_otp %}Use the code we sent to finish signing in.{% else %}Verification protects your pickup and rewards history.{% endif %}</span>
+		</div>
+	</div>
+	<div class="auth-form-panel">
+		<div class="auth-form-inner">
+			<p class="eyebrow">{% if login_otp %}Confirm sign in{% else %}Verify your account{% endif %}</p>
+			<h1>Enter the six-digit code.</h1>
+			<p class="auth-lede">We sent a verification code to your email. It expires after 10 minutes.</p>
+			<form method="post" class="otp-form otp-form-animated" data-otp-form>
+				{% csrf_token %}
+				<label id="otp-label">Verification code</label>
+				<div class="otp-boxes" role="group" aria-labelledby="otp-label" data-otp-boxes>
+					{% for position in '123456' %}<label class="otp-slot"><input class="otp-box" type="text" inputmode="numeric" pattern="[0-9]" maxlength="1" aria-label="Digit {{ forloop.counter }}" autocomplete="{% if forloop.first %}one-time-code{% else %}off{% endif %}" required><span class="slot-win" aria-hidden="true"><svg class="slot-spark" viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="1" y="1" width="98" height="98" pathLength="1" /></svg></span></label>{% endfor %}
+				</div>
+				<input id="code" name="code" type="hidden" required>
+				<span class="otp-hint">Six digits / one-time use</span>
+				<button class="button otp-submit" type="submit">{% if login_otp %}Complete sign in{% else %}Verify account{% endif %}</button>
+				{% if expired %}<p class="form-error">This code has expired. Please request a new one.</p>{% endif %}
+			</form>
+			<p class="auth-switch">Need help? <a href="{% url 'contact' %}">Contact EcoBin support</a></p>
+		</div>
+	</div>
+</section>
+{% endblock %}
